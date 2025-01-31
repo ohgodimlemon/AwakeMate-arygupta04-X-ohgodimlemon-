@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Detection Web App</title>
+    <style>
+        /* Make the entire page a flexbox container */
+        body {
+            display: flex;
+            justify-content: center;  /* Centers horizontally */
+            align-items: center;  /* Centers vertically */
+            height: 100vh;  /* Full viewport height */
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+
+        /* Container for the video */
+        .video-container {
+            display: flex;
+            justify-content: center;  /* Ensures the video stays centered */
+            align-items: center;
+            background-color: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+            width: 650px;  /* Optional: Adjust width */
+            height: 500px; /* Optional: Adjust height */
+        }
+
+        /* Style the video to stay centered */
+        img {
+            border-radius: 10px;
+            max-width: 100%;  /* Ensures responsiveness */
+            max-height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h2>Live Eye Status Detection</h2>
+    <video id="video" width="640" height="480" autoplay></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <p>Status: <span id="status" style="font-weight: bold; font-size: 18px;">Waiting...</span></p>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status');
+
+        // Access Webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => console.error("Error accessing camera:", err));
+
+        // Function to capture and send frames to Flask
+        function sendFrame() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                let formData = new FormData();
+                formData.append("image", blob, "frame.jpg");
+
+                fetch("/detect", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Received status:", data.status); // Log the status response
+                    statusText.innerText = data.status;
+                })
+                .catch(error => console.error("Error:", error));
+            }, "image/jpeg");
+
+            setTimeout(sendFrame, 1000); // Send every second
+        }
+
+        // Start sending frames when the video plays
+        video.addEventListener("play", () => {
+            sendFrame();
+        });
+    </script>
+</body>
+</html>
