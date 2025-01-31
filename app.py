@@ -21,7 +21,7 @@ def eye_aspect_ratio(eye):
     ear = (A + B) / (2.0 * C)
     return ear
 
-def process_image(frame):
+def process_image(frame, sleep_counter):
     if frame is None:
         raise ValueError('Image is not found or unable to open')
 
@@ -29,7 +29,7 @@ def process_image(frame):
 
     # Find all face locations
     face_locations = face_recognition.face_locations(rgb_frame)
-
+    
     for face_location in face_locations:
         # Extract facial landmarks
         landmarks = face_recognition.face_landmarks(rgb_frame, [face_location])[0]
@@ -42,35 +42,44 @@ def process_image(frame):
         ear = (left_ear + right_ear) / 2.0
 
         # Check if eyes are closed
+        
         if ear >= 0.28:
-            if hasattr(process_image, "last_status") and process_image.last_status != "Active":
+            if hasattr(process_image, "last_status"): #and process_image.last_status != "Active":
                 stop_beep()  # Stop the beep if the status changes to "Active"
             process_image.last_status = "Active"
-            return "Active"
-        elif ear > 0.20 and ear < 0.28:
-            if not hasattr(process_image, "last_status") or process_image.last_status != "Drowsy":
+            sleep_counter = 0
+            return "Active", sleep_counter
+
+        sleep_counter += 1  # Increment sleep counter when eyes are partially or fully closed
+
+        if 0.20 <= ear < 0.28:
+            if sleep_counter > 6: #and process_image.last_status != "Drowsy":
                 play_beep()  # Start beeping when drowsy
-            process_image.last_status = "Drowsy"
-            return "Drowsy"
-        else:
-            if not hasattr(process_image, "last_status") or process_image.last_status != "Asleep":
+                process_image.last_status = "Drowsy"
+            return "Drowsy", sleep_counter
+
+        if ear < 0.20:
+            if sleep_counter > 6: #and process_image.last_status != "Asleep":
                 play_beep()  # Start beeping when asleep
-            process_image.last_status = "Asleep"
-            return "Asleep"
-        
+                process_image.last_status = "Asleep"
+            return "Asleep", sleep_counter
+    
+    return process_image.last_status, sleep_counter
+
+process_image.last_status = "Active"  # Initialize status variable  
 # Main function to display the webcam feed and status
 def main():
     # **Live Camera Feed**
     cap = cv2.VideoCapture(0)
-
+    sleep_counter = 0
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             print("Failed to capture frame")
             break
- 
-        status = process_image(frame)
-
+        
+        status, sleep_counter = process_image(frame, sleep_counter)
+    
         # Display the video feed with status overlay
         cv2.putText(frame, f"Status: {status}", (30, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
