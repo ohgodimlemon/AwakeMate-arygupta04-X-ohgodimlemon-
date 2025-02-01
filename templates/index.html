@@ -1,1 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drowsiness Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            margin-top: 20px;
+            color: #333;
+        }
+        #video-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        img {
+            border: 5px solid #333;
+            border-radius: 10px;
+            max-width: 100%;
+            height: auto;
+        }
+        p {
+            font-size: 18px;
+            color: #555;
+            margin-top: 10px;
+        }
+        .button-container {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            width: 200px;
+            max-width: 90%;
+        }
+        button:disabled {
+            background-color: #aaa;
+        }
+
+        /* Media Query for mobile devices */
+        @media (max-width: 600px) {
+            p {
+                font-size: 16px;
+            }
+            button {
+                font-size: 14px;
+                padding: 8px 16px;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Drowsiness Detection System</h1>
+    <div id="video-container">
+        <img id="video-feed" src="{{ url_for('video_feed') }}" alt="Live Video Feed">
+    </div>
+    <p>Ensure your face is visible to the camera.</p>
+
+    <!-- Button Controls -->
+    <div class="button-container">
+        <button id="start-btn" onclick="startDetection()">Start</button>
+        <button id="pause-btn" onclick="pauseDetection()" disabled>Pause</button>
+        <button id="resume-btn" onclick="resumeDetection()" disabled>Resume</button>
+        <button id="end-btn" onclick="endDetection()" disabled>End</button>
+    </div>
+
+    <script>
+        function startDetection() {
+            fetch("/start_detection").then(response => response.json()).then(data => {
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = false;
+                document.getElementById('end-btn').disabled = false;
+                document.getElementById('resume-btn').disabled = false;
+            });
+        }
+
+        function pauseDetection() {
+            fetch("/pause_detection").then(response => response.json());
+            document.getElementById('pause-btn').disabled = true;
+            document.getElementById('resume-btn').disabled = false;
+        }
+
+        function resumeDetection() {
+            fetch("/resume_detection").then(response => response.json());
+            document.getElementById('pause-btn').disabled = false;
+            document.getElementById('resume-btn').disabled = true;
+        }
+
+        function endDetection() {
+            fetch("/end_detection").then(response => response.json()).then(data => {
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('resume-btn').disabled = true;
+                document.getElementById('end-btn').disabled = true;
+            });
+        }
+    </script>
+</body>
+</html>
 
