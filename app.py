@@ -1,98 +1,159 @@
+from flask import Flask, render_template, Response, jsonify
 import cv2
 import numpy as np
 import face_recognition
 from scipy.spatial import distance
 import pygame
-# Initialize pygame mixer
+
+# Initialize Flask application
+app = Flask(__name__)
+
+# Initialize pygame mixer for sound alerts (e.g., beeping sounds)
 pygame.mixer.init()
 
+# Function to play beep sound
 def play_beep():
-    beep_sound = pygame.mixer.Sound("beep.wav")  # Replace "beep.wav" with a valid path to a .wav file
+    beep_sound = pygame.mixer.Sound("beep.wav")  # Ensure path to beep sound is correct
     beep_sound.play()
 
+# Function to stop beep sound
 def stop_beep():
-    pygame.mixer.stop()  # Stop any currently playing sound
+    pygame.mixer.stop()
 
-
+# Function to calculate Eye Aspect Ratio (EAR) for eye tracking
 def eye_aspect_ratio(eye):
-    A = distance.euclidean(eye[1], eye[5])
-    B = distance.euclidean(eye[2], eye[4])
-    C = distance.euclidean(eye[0], eye[3])
-    ear = (A + B) / (2.0 * C)
+    A = distance.euclidean(eye[1], eye[5])  # Distance between vertical eye landmarks
+    B = distance.euclidean(eye[2], eye[4])  # Distance between vertical eye landmarks
+    C = distance.euclidean(eye[0], eye[3])  # Distance between horizontal eye landmarks
+    ear = (A + B) / (2.0 * C)  # Calculate EAR
     return ear
 
-def process_image(frame, sleep_counter):
-    if frame is None:
-        raise ValueError('Image is not found or unable to open')
+# Global flags to control detection state
+detection_active = False  # Flag to check if detection is active
+detection_paused = False  # Flag to check if detection is paused
+sleep_counter = 0  # Counter to track sleep state based on EAR
 
+# Function to process each frame of video for face and eye detection
+def process_image(frame):
+    global sleep_counter, detection_active, detection_paused
+
+    # If no frame is received or detection is inactive, return default status
+    if frame is None or not detection_active:
+        return "No Frame", sleep_counter
+
+    # Convert frame to RGB for face recognition
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Find all face locations
+    # Detect faces in the frame
     face_locations = face_recognition.face_locations(rgb_frame)
-    
+
+    # Loop through all detected faces
     for face_location in face_locations:
-        # Extract facial landmarks
+        # Find facial landmarks (including eyes) for each face
         landmarks = face_recognition.face_landmarks(rgb_frame, [face_location])[0]
         left_eye = np.array(landmarks['left_eye'])
         right_eye = np.array(landmarks['right_eye'])
 
-        # Calculate EAR
+        # Calculate EAR for both eyes
         left_ear = eye_aspect_ratio(left_eye)
         right_ear = eye_aspect_ratio(right_eye)
-        ear = (left_ear + right_ear) / 2.0
+        ear = (left_ear + right_ear) / 2.0  # Average EAR for both eyes
 
-        # Check if eyes are closed
-        
-        if ear >= 0.28:
-            if hasattr(process_image, "last_status"): #and process_image.last_status != "Active":
-                stop_beep()  # Stop the beep if the status changes to "Active"
-            process_image.last_status = "Active"
-            sleep_counter = 0
+        # Determine the status based on EAR value
+        if ear >= 0.28:  # Active if EAR is above threshold
+            stop_beep()  # Stop beeping sound
+            sleep_counter = 0  # Reset sleep counter
             return "Active", sleep_counter
 
-        sleep_counter += 1  # Increment sleep counter when eyes are partially or fully closed
+        sleep_counter += 1  # Increment sleep counter if EAR is below threshold
 
-        if 0.20 <= ear < 0.28:
-            if sleep_counter > 6: #and process_image.last_status != "Drowsy":
-                play_beep()  # Start beeping when drowsy
-                process_image.last_status = "Drowsy"
+        # Drowsy state: EAR between 0.20 and 0.28 and sleep counter exceeds threshold
+        if 0.20 <= ear < 0.28 and sleep_counter > 6:
+            play_beep()  # Play beep sound
             return "Drowsy", sleep_counter
 
-        if ear < 0.20:
-            if sleep_counter > 6: #and process_image.last_status != "Asleep":
-                play_beep()  # Start beeping when asleep
-                process_image.last_status = "Asleep"
+        # Asleep state: EAR below 0.20 and sleep counter exceeds threshold
+        if ear < 0.20 and sleep_counter > 6:
+            play_beep()  # Play beep sound
             return "Asleep", sleep_counter
-    
-    return process_image.last_status, sleep_counter
 
-process_image.last_status = "Active"  # Initialize status variable  
-# Main function to display the webcam feed and status
-def main():
-    # **Live Camera Feed**
+    # Default status is "Active" if no sleep-related conditions are met
+    return "Active", sleep_counter
+
+# Function to generate video stream frames
+def generate_frames():
+    global detection_active, detection_paused, sleep_counter
+
+    # Initialize video capture from default webcam (device 0)
     cap = cv2.VideoCapture(0)
-    sleep_counter = 0
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            print("Failed to capture frame")
+
+    # Continuously capture and process video frames
+    while True:
+        success, frame = cap.read()
+        if not success:
             break
-        
-        status, sleep_counter = process_image(frame, sleep_counter)
-    
-        # Display the video feed with status overlay
+
+        # If detection is active and not paused, process the frame
+        if detection_active and not detection_paused:
+            status, sleep_counter = process_image(frame)
+        else:
+            status = "Paused"  # Show "Paused" if detection is inactive or paused
+
+        # Add status text on the video frame
         cv2.putText(frame, f"Status: {status}", (30, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-        
-        cv2.imshow("Live Eye Detection", frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to exit
-            break
+        # Encode the frame as JPEG to send over HTTP
+        _, buffer = cv2.imencode('.jpg', frame)
+        frame_bytes = buffer.tobytes()
 
+        # Yield the frame in the appropriate format for live streaming
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+    # Release the video capture after processing
     cap.release()
-    cv2.destroyAllWindows()
 
+# Route to render the index HTML page
+@app.route('/')
+def index():
+    return render_template('index.html')
 
+# Route to stream video feed to the front-end
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# Route to start the detection process
+@app.route('/start_detection')
+def start_detection():
+    global detection_active, detection_paused
+    detection_active = True  # Activate detection
+    detection_paused = False  # Ensure detection is not paused
+    return jsonify({"status": "Detection Started"})  # Return status as JSON response
+
+# Route to pause the detection process
+@app.route('/pause_detection')
+def pause_detection():
+    global detection_paused
+    detection_paused = True  # Pause detection
+    return jsonify({"status": "Detection Paused"})  # Return status as JSON response
+
+# Route to resume the detection process
+@app.route('/resume_detection')
+def resume_detection():
+    global detection_paused
+    detection_paused = False  # Resume detection
+    return jsonify({"status": "Detection Resumed"})  # Return status as JSON response
+
+# Route to stop the detection process
+@app.route('/end_detection')
+def end_detection():
+    global detection_active, detection_paused
+    detection_active = False  # Deactivate detection
+    detection_paused = False  # Reset pause flag
+    return jsonify({"status": "Detection Ended"})  # Return status as JSON response
+
+# Run the Flask application in debug mode
 if __name__ == "__main__":
-    main()
-
+    app.run(debug=True)

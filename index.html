@@ -3,87 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eye Detection Web App</title>
+    <title>Drowsiness Detection</title>
     <style>
-        /* Make the entire page a flexbox container */
         body {
-            display: flex;
-            justify-content: center;  /* Centers horizontally */
-            align-items: center;  /* Centers vertically */
-            height: 100vh;  /* Full viewport height */
-            margin: 0;
+            font-family: Arial, sans-serif;
+            text-align: center;
             background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
         }
-
-        /* Container for the video */
-        .video-container {
+        h1 {
+            margin-top: 20px;
+            color: #333;
+        }
+        #video-container {
             display: flex;
-            justify-content: center;  /* Ensures the video stays centered */
-            align-items: center;
-            background-color: white;
-            padding: 10px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
-            width: 650px;  /* Optional: Adjust width */
-            height: 500px; /* Optional: Adjust height */
+            justify-content: center;
+            margin-top: 20px;
         }
-
-        /* Style the video to stay centered */
         img {
+            border: 5px solid #333;
             border-radius: 10px;
-            max-width: 100%;  /* Ensures responsiveness */
-            max-height: 100%;
+            width: 640px;
+            height: 480px;
+        }
+        p {
+            font-size: 18px;
+            color: #555;
+            margin-top: 10px;
+        }
+        .button-container {
+            margin-top: 20px;
+        }
+        button {
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+        }
+        button:disabled {
+            background-color: #aaa;
         }
     </style>
 </head>
 <body>
-    <h2>Live Eye Status Detection</h2>
-    <video id="video" width="640" height="480" autoplay></video>
-    <canvas id="canvas" style="display:none;"></canvas>
-    <p>Status: <span id="status" style="font-weight: bold; font-size: 18px;">Waiting...</span></p>
+    <h1>Drowsiness Detection System</h1>
+    <div id="video-container">
+        <img id="video-feed" src="{{ url_for('video_feed') }}" alt="Live Video Feed">
+    </div>
+    <p>Ensure your face is visible to the camera.</p>
+
+    <!-- Button Controls -->
+    <div class="button-container">
+        <button id="start-btn" onclick="startDetection()">Start</button>
+        <button id="pause-btn" onclick="pauseDetection()" disabled>Pause</button>
+        <button id="resume-btn" onclick="resumeDetection()" disabled>Resume</button>
+        <button id="end-btn" onclick="endDetection()" disabled>End</button>
+    </div>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status');
-
-        // Access Webcam
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                video.srcObject = stream;
-            })
-            .catch(err => console.error("Error accessing camera:", err));
-
-        // Function to capture and send frames to Flask
-        function sendFrame() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            canvas.toBlob(blob => {
-                let formData = new FormData();
-                formData.append("image", blob, "frame.jpg");
-
-                fetch("/detect", {
-                    method: "POST",
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log("Received status:", data.status); // Log the status response
-                    statusText.innerText = data.status;
-                })
-                .catch(error => console.error("Error:", error));
-            }, "image/jpeg");
-
-            setTimeout(sendFrame, 1000); // Send every second
+        function startDetection() {
+            fetch("/start_detection").then(response => response.json()).then(data => {
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = false;
+                document.getElementById('end-btn').disabled = false;
+                document.getElementById('resume-btn').disabled = false;
+            });
         }
 
-        // Start sending frames when the video plays
-        video.addEventListener("play", () => {
-            sendFrame();
-        });
+        function pauseDetection() {
+            fetch("/pause_detection").then(response => response.json());
+            document.getElementById('pause-btn').disabled = true;
+            document.getElementById('resume-btn').disabled = false;
+        }
+
+        function resumeDetection() {
+            fetch("/resume_detection").then(response => response.json());
+            document.getElementById('pause-btn').disabled = false;
+            document.getElementById('resume-btn').disabled = true;
+        }
+
+        function endDetection() {
+            fetch("/end_detection").then(response => response.json()).then(data => {
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('resume-btn').disabled = true;
+                document.getElementById('end-btn').disabled = true;
+            });
+        }
     </script>
 </body>
 </html>
