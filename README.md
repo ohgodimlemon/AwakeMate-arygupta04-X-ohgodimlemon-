@@ -1,4 +1,4 @@
-# AwakeMate
+# AwakeMate (arygupta04 X ohgodimlemon)
 
 **AwakeMate** is your attentiveness checker, whether you're on the road or at your desk! Imagine a smart system that not only keeps you alert while driving but also helps you stay productive and focused at home. By monitoring your facial cues through your webcam, AwakeMate determines if you're **active**, **drowsy**, or **sleepy**, and it even sounds an alarm if it catches you distracted by your phone. With AwakeMate, safety and productivity are always within reach.
 
